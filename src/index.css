@@ -1,0 +1,75 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Work+Sans:wght@500;600;700&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Work Sans", sans-serif;
+
+  --color-surface: #f9f6f5;
+  --color-surface-container-low: #f3f0ef;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #e5e2e1;
+  --color-surface-container-highest: #dfdcdc;
+  --color-on-surface: #2f2e2e;
+  --color-on-surface-variant: #5c5b5b;
+  --color-outline-variant: #afacac;
+  
+  --color-primary: #a63400;
+  --color-primary-container: #ff7948;
+  --color-on-primary: #ffffff;
+  
+  --color-secondary-container: #d7e4ec;
+  --color-on-secondary-container: #47545a;
+  
+  --color-error: #b31b25;
+  --color-on-error: #ffffff;
+  
+  --color-inverse-surface: #0e0e0e;
+  --color-on-inverse-surface: #f5f5f5;
+
+  --shadow-ambient: 0px 12px 32px rgba(47, 46, 46, 0.06);
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-linear-to-r from-primary to-primary-container text-on-primary px-6 py-2.5 rounded-md font-medium transition-all hover:opacity-90 active:scale-95 shadow-sm;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary-container text-on-secondary-container px-6 py-2.5 rounded-md font-medium transition-all hover:opacity-90 active:scale-95;
+  }
+  
+  .btn-tertiary {
+    @apply bg-transparent text-primary px-6 py-2.5 rounded-md font-medium transition-all hover:bg-black/5 active:scale-95;
+  }
+
+  .status-block {
+    @apply px-2 py-1 text-[10px] font-display font-bold uppercase tracking-wider rounded-sm;
+  }
+  
+  .status-critical {
+    @apply bg-error text-on-error;
+  }
+  
+  .status-warning {
+    @apply bg-primary-container text-on-primary;
+  }
+  
+  .status-healthy {
+    @apply bg-emerald-700 text-white;
+  }
+
+  .input-industrial {
+    @apply bg-surface-container-highest px-4 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-primary transition-all text-on-surface placeholder:text-on-surface-variant/50;
+  }
+}
