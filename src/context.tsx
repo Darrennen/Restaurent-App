@@ -4,11 +4,11 @@ import type { AppState, InventoryItem, Order } from './types';
 // --- Initial Data ---
 
 const INITIAL_INVENTORY: InventoryItem[] = [
-  { id: '1', name: 'Wagyu Ribeye', category: 'Proteins', quantity: 12, unit: 'kg', status: 'healthy', lastUpdated: new Date().toISOString(), minThreshold: 5 },
-  { id: '2', name: 'Truffle Oil', category: 'Pantry', quantity: 0.5, unit: 'L', status: 'critical', lastUpdated: new Date().toISOString(), minThreshold: 2 },
-  { id: '3', name: 'Heirloom Tomatoes', category: 'Produce', quantity: 5, unit: 'kg', status: 'warning', lastUpdated: new Date().toISOString(), minThreshold: 4 },
-  { id: '4', name: 'Heavy Cream', category: 'Dairy', quantity: 15, unit: 'L', status: 'healthy', lastUpdated: new Date().toISOString(), minThreshold: 5 },
-  { id: '5', name: 'Sea Salt', category: 'Pantry', quantity: 2, unit: 'kg', status: 'warning', lastUpdated: new Date().toISOString(), minThreshold: 1.5 },
+  { id: '1', name: 'Wagyu Ribeye', category: 'Proteins', quantity: 12, unit: 'kg', status: 'healthy', lastUpdated: new Date().toISOString(), minThreshold: 5, parLevel: 15 },
+  { id: '2', name: 'Truffle Oil', category: 'Pantry', quantity: 0.5, unit: 'L', status: 'critical', lastUpdated: new Date().toISOString(), minThreshold: 2, parLevel: 5 },
+  { id: '3', name: 'Heirloom Tomatoes', category: 'Produce', quantity: 5, unit: 'kg', status: 'warning', lastUpdated: new Date().toISOString(), minThreshold: 4, parLevel: 10 },
+  { id: '4', name: 'Heavy Cream', category: 'Dairy', quantity: 15, unit: 'L', status: 'healthy', lastUpdated: new Date().toISOString(), minThreshold: 5, parLevel: 20 },
+  { id: '5', name: 'Sea Salt', category: 'Pantry', quantity: 2, unit: 'kg', status: 'warning', lastUpdated: new Date().toISOString(), minThreshold: 1.5, parLevel: 5 },
 ];
 
 const INITIAL_ORDERS: Order[] = [
@@ -78,7 +78,15 @@ const STORAGE_KEY = 'kinetic-kitchen-state';
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Migrate: add parLevel if missing from older saved data
+      parsed.inventory = parsed.inventory.map((item: InventoryItem) => ({
+        ...item,
+        parLevel: item.parLevel ?? item.minThreshold * 2,
+      }));
+      return parsed;
+    }
   } catch {}
   return { inventory: INITIAL_INVENTORY, orders: INITIAL_ORDERS };
 }

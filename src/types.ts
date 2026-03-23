@@ -1,4 +1,4 @@
-export type Screen = 'dashboard' | 'inventory' | 'orders' | 'settings';
+export type Screen = 'dashboard' | 'restock' | 'inventory' | 'orders' | 'settings';
 
 export interface InventoryItem {
   id: string;
@@ -9,6 +9,7 @@ export interface InventoryItem {
   status: 'healthy' | 'warning' | 'critical';
   lastUpdated: string;
   minThreshold: number;
+  parLevel: number;
 }
 
 export interface OrderItem {

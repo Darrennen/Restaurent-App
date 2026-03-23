@@ -18,6 +18,8 @@ import {
   Send,
   Sparkles,
   RefreshCw,
+  ShoppingCart,
+  CheckCircle2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppProvider, useApp } from './context';
@@ -121,12 +123,14 @@ function InventoryModal({
     quantity: item?.quantity?.toString() ?? '',
     unit: item?.unit ?? 'kg',
     minThreshold: item?.minThreshold?.toString() ?? '',
+    parLevel: item?.parLevel?.toString() ?? '',
   });
 
   function handleSave() {
     if (!form.name.trim() || !form.quantity || !form.minThreshold) return;
     const qty = parseFloat(form.quantity);
     const threshold = parseFloat(form.minThreshold);
+    const parLevel = form.parLevel ? parseFloat(form.parLevel) : threshold * 2;
     const status: InventoryItem['status'] =
       qty <= 0 ? 'critical' : qty <= threshold ? 'warning' : 'healthy';
 
@@ -138,6 +142,7 @@ function InventoryModal({
           ...form,
           quantity: qty,
           minThreshold: threshold,
+          parLevel,
           status,
           lastUpdated: new Date().toISOString(),
         },
@@ -152,6 +157,7 @@ function InventoryModal({
           quantity: qty,
           unit: form.unit,
           minThreshold: threshold,
+          parLevel,
           status,
           lastUpdated: new Date().toISOString(),
         },
@@ -233,6 +239,20 @@ function InventoryModal({
               onChange={(e) => setForm((f) => ({ ...f, minThreshold: e.target.value }))}
             />
           </div>
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+            Par Level <span className="font-normal normal-case">(restock target — leave blank to auto-set)</span>
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            className="input-industrial w-full"
+            placeholder={form.minThreshold ? `e.g. ${parseFloat(form.minThreshold || '0') * 2}` : 'e.g. 10'}
+            value={form.parLevel}
+            onChange={(e) => setForm((f) => ({ ...f, parLevel: e.target.value }))}
+          />
         </div>
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="btn-secondary flex-1">
@@ -569,6 +589,220 @@ function AlertsPanel({
   );
 }
 
+// ─── Restock Screen ───────────────────────────────────────────────────────────
+
+function RestockScreen({ onAdd }: { onAdd: () => void }) {
+  const { state, dispatch } = useApp();
+  const [filter, setFilter] = useState<'urgent' | 'all'>('urgent');
+  const [quickEdit, setQuickEdit] = useState<{ id: string; value: string } | null>(null);
+
+  const urgent = state.inventory.filter((i) => i.status !== 'healthy');
+  const displayed = filter === 'urgent' ? urgent : [...state.inventory];
+  const sorted = [...displayed].sort((a, b) => {
+    const order = { critical: 0, warning: 1, healthy: 2 };
+    return order[a.status] - order[b.status];
+  });
+
+  function setToPar(item: InventoryItem) {
+    dispatch({ type: 'UPDATE_INVENTORY', item: { ...item, quantity: item.parLevel } });
+  }
+
+  function saveQuickEdit(item: InventoryItem) {
+    if (!quickEdit || quickEdit.id !== item.id) return;
+    const qty = parseFloat(quickEdit.value);
+    if (!isNaN(qty) && qty >= 0) {
+      dispatch({ type: 'UPDATE_INVENTORY', item: { ...item, quantity: qty } });
+    }
+    setQuickEdit(null);
+  }
+
+  const criticalCount = state.inventory.filter((i) => i.status === 'critical').length;
+  const warningCount = state.inventory.filter((i) => i.status === 'warning').length;
+  const healthyCount = state.inventory.filter((i) => i.status === 'healthy').length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-8"
+    >
+      <header className="flex justify-between items-end">
+        <div>
+          <p className="text-on-surface-variant text-sm font-medium uppercase tracking-widest mb-2">
+            {new Date().toLocaleDateString('en-US', {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </p>
+          <h1 className="text-5xl font-bold mb-2">Restock</h1>
+          <p className="text-on-surface-variant">
+            {urgent.length === 0
+              ? 'All items are well stocked.'
+              : `${urgent.length} item${urgent.length !== 1 ? 's' : ''} need${urgent.length === 1 ? 's' : ''} restocking`}
+          </p>
+        </div>
+        <button onClick={onAdd} className="btn-primary flex items-center gap-2">
+          <Plus size={18} /> Add Item
+        </button>
+      </header>
+
+      {/* Stock summary */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-surface-container-lowest rounded-md p-5 border-l-4 border-error">
+          <div className="text-3xl font-display font-bold text-error">{criticalCount}</div>
+          <div className="text-xs text-on-surface-variant uppercase tracking-wider mt-1">Critical</div>
+        </div>
+        <div className="bg-surface-container-lowest rounded-md p-5 border-l-4 border-primary-container">
+          <div className="text-3xl font-display font-bold text-primary">{warningCount}</div>
+          <div className="text-xs text-on-surface-variant uppercase tracking-wider mt-1">Low Stock</div>
+        </div>
+        <div className="bg-surface-container-lowest rounded-md p-5 border-l-4 border-emerald-500">
+          <div className="text-3xl font-display font-bold text-emerald-700">{healthyCount}</div>
+          <div className="text-xs text-on-surface-variant uppercase tracking-wider mt-1">Healthy</div>
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2">
+        {(['urgent', 'all'] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+              filter === f
+                ? 'bg-inverse-surface text-on-inverse-surface'
+                : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+            }`}
+          >
+            {f === 'urgent'
+              ? `Needs Restock (${urgent.length})`
+              : `All Items (${state.inventory.length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Items list */}
+      <div className="space-y-3">
+        {sorted.length === 0 ? (
+          <div className="text-center py-16 text-on-surface-variant bg-surface-container-lowest rounded-md">
+            <CheckCircle2 size={40} className="mx-auto mb-3 text-emerald-500 opacity-60" />
+            <p className="font-bold text-lg">All stocked up!</p>
+            <p className="text-sm mt-1">No items currently need restocking.</p>
+          </div>
+        ) : (
+          sorted.map((item) => {
+            const needToBuy = Math.max(0, item.parLevel - item.quantity);
+            const isEditing = quickEdit?.id === item.id;
+            return (
+              <div
+                key={item.id}
+                className={`bg-surface-container-lowest rounded-md p-5 flex items-center gap-4 border-l-4 ${
+                  item.status === 'critical'
+                    ? 'border-error'
+                    : item.status === 'warning'
+                    ? 'border-primary-container'
+                    : 'border-emerald-500'
+                }`}
+              >
+                {/* Name + category */}
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-on-surface">{item.name}</div>
+                  <div className="text-xs text-on-surface-variant mt-0.5">{item.category}</div>
+                </div>
+
+                {/* Current qty — tap to edit inline */}
+                <div className="text-center min-w-[90px]">
+                  <div className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Have</div>
+                  {isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        autoFocus
+                        className="input-industrial w-16 text-center text-sm py-1"
+                        value={quickEdit.value}
+                        onChange={(e) =>
+                          setQuickEdit({ id: item.id, value: e.target.value })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveQuickEdit(item);
+                          if (e.key === 'Escape') setQuickEdit(null);
+                        }}
+                      />
+                      <button
+                        onClick={() => saveQuickEdit(item)}
+                        className="text-emerald-600 hover:text-emerald-700 p-1"
+                        title="Save"
+                      >
+                        <CheckCircle2 size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        setQuickEdit({ id: item.id, value: item.quantity.toString() })
+                      }
+                      className="font-display font-bold text-xl hover:text-primary transition-colors"
+                      title="Tap to update quantity"
+                    >
+                      {item.quantity}{' '}
+                      <span className="text-xs font-normal text-on-surface-variant">
+                        {item.unit}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Need to buy */}
+                <div className="text-center min-w-[90px]">
+                  <div className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Buy</div>
+                  <div
+                    className={`font-display font-bold text-xl ${
+                      needToBuy > 0
+                        ? item.status === 'critical'
+                          ? 'text-error'
+                          : 'text-primary'
+                        : 'text-emerald-600'
+                    }`}
+                  >
+                    {needToBuy > 0 ? needToBuy : '✓'}{' '}
+                    {needToBuy > 0 && (
+                      <span className="text-xs font-normal text-on-surface-variant">
+                        {item.unit}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Par level */}
+                <div className="text-center min-w-[70px] hidden sm:block">
+                  <div className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Par</div>
+                  <div className="text-sm font-medium">
+                    {item.parLevel} {item.unit}
+                  </div>
+                </div>
+
+                {/* Restocked button — only for non-healthy */}
+                {item.status !== 'healthy' && (
+                  <button
+                    onClick={() => setToPar(item)}
+                    className="btn-primary text-xs py-2 px-3 whitespace-nowrap"
+                    title={`Set to par: ${item.parLevel} ${item.unit}`}
+                  >
+                    Restocked ✓
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 const Sidebar = ({
@@ -580,6 +814,7 @@ const Sidebar = ({
 }) => {
   const navItems = [
     { id: 'dashboard' as Screen, icon: LayoutDashboard, label: 'Dashboard' },
+    { id: 'restock' as Screen, icon: ShoppingCart, label: 'Restock' },
     { id: 'inventory' as Screen, icon: Package, label: 'Inventory' },
     { id: 'orders' as Screen, icon: ClipboardList, label: 'Orders' },
   ];
@@ -1263,6 +1498,8 @@ function AppInner() {
     else setShowAddInventory(true);
   }
 
+
+
   return (
     <div className="flex h-screen bg-surface overflow-hidden text-on-surface selection:bg-primary/20">
       <Sidebar activeScreen={screen} setScreen={setScreen} />
@@ -1270,6 +1507,7 @@ function AppInner() {
       <main className="flex-1 overflow-y-auto relative pr-16">
         <div className="max-w-7xl mx-auto px-8 md:px-20 py-16">
           {screen === 'dashboard' && <Dashboard setScreen={setScreen} />}
+          {screen === 'restock' && <RestockScreen onAdd={() => setShowAddInventory(true)} />}
           {screen === 'inventory' && <Inventory onAdd={() => setShowAddInventory(true)} />}
           {screen === 'orders' && <Orders onAdd={() => setShowAddOrder(true)} />}
           {screen === 'settings' && <SettingsScreen />}
