@@ -1191,7 +1191,10 @@ function Inventory({ onAdd }: { onAdd: () => void }) {
 // ─── Attendance Screen ────────────────────────────────────────────────────────
 
 function toDateStr(date: Date) {
-  return date.toISOString().split('T')[0]; // YYYY-MM-DD
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`; // YYYY-MM-DD in local time
 }
 
 function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
