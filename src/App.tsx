@@ -1199,7 +1199,7 @@ function Inventory({ onAdd }: { onAdd: () => void }) {
                   </div>
                 </td>
                 <td className="px-6 py-5 text-right">
-                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center justify-end gap-1">
                     <button
                       onClick={() => startEdit(item)}
                       className="p-2 hover:bg-surface-container-highest rounded-md transition-colors text-on-surface-variant"
