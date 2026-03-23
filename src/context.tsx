@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import type { AppState, InventoryItem, Order } from './types';
+import type { AppState, InventoryItem, StaffMember, AttendanceRecord } from './types';
 
 // --- Initial Data ---
 
@@ -11,10 +11,11 @@ const INITIAL_INVENTORY: InventoryItem[] = [
   { id: '5', name: 'Sea Salt', category: 'Pantry', quantity: 2, unit: 'kg', status: 'warning', lastUpdated: new Date().toISOString(), minThreshold: 1.5, parLevel: 5 },
 ];
 
-const INITIAL_ORDERS: Order[] = [
-  { id: 'ORD-1024', table: 'T-04', items: [{ name: 'Wagyu Steak', quantity: 2 }, { name: 'Red Wine Jus', quantity: 1 }], status: 'preparing', time: '12:45', createdAt: Date.now() - 900000 },
-  { id: 'ORD-1025', table: 'T-12', items: [{ name: 'Truffle Pasta', quantity: 1 }, { name: 'Burrata Salad', quantity: 1 }], status: 'pending', time: '12:50', createdAt: Date.now() - 600000 },
-  { id: 'ORD-1026', table: 'T-02', items: [{ name: 'Roasted Chicken', quantity: 1 }, { name: 'Asparagus', quantity: 1 }], status: 'ready', time: '12:30', createdAt: Date.now() - 1800000 },
+const INITIAL_STAFF: StaffMember[] = [
+  { id: 's1', name: 'Alice Chen', role: 'Head Chef', hourlyRate: 25 },
+  { id: 's2', name: 'Bob Tan', role: 'Sous Chef', hourlyRate: 18 },
+  { id: 's3', name: 'Carol Lim', role: 'Waiter', hourlyRate: 12 },
+  { id: 's4', name: 'David Wong', role: 'Cashier', hourlyRate: 12 },
 ];
 
 // --- Actions ---
@@ -23,9 +24,11 @@ type Action =
   | { type: 'ADD_INVENTORY'; item: InventoryItem }
   | { type: 'UPDATE_INVENTORY'; item: InventoryItem }
   | { type: 'DELETE_INVENTORY'; id: string }
-  | { type: 'ADD_ORDER'; order: Order }
-  | { type: 'UPDATE_ORDER_STATUS'; id: string; status: Order['status'] }
-  | { type: 'DELETE_ORDER'; id: string };
+  | { type: 'ADD_STAFF'; member: StaffMember }
+  | { type: 'UPDATE_STAFF'; member: StaffMember }
+  | { type: 'DELETE_STAFF'; id: string }
+  | { type: 'SET_ATTENDANCE'; record: AttendanceRecord }
+  | { type: 'DELETE_ATTENDANCE'; id: string };
 
 function computeStatus(quantity: number, minThreshold: number): InventoryItem['status'] {
   if (quantity <= 0) return 'critical';
@@ -48,17 +51,33 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'DELETE_INVENTORY':
       return { ...state, inventory: state.inventory.filter((i) => i.id !== action.id) };
-    case 'ADD_ORDER':
-      return { ...state, orders: [action.order, ...state.orders] };
-    case 'UPDATE_ORDER_STATUS':
+
+    case 'ADD_STAFF':
+      return { ...state, staff: [...state.staff, action.member] };
+    case 'UPDATE_STAFF':
+      return { ...state, staff: state.staff.map((s) => (s.id === action.member.id ? action.member : s)) };
+    case 'DELETE_STAFF':
       return {
         ...state,
-        orders: state.orders.map((o) =>
-          o.id === action.id ? { ...o, status: action.status } : o
-        ),
+        staff: state.staff.filter((s) => s.id !== action.id),
+        attendance: state.attendance.filter((a) => a.staffId !== action.id),
       };
-    case 'DELETE_ORDER':
-      return { ...state, orders: state.orders.filter((o) => o.id !== action.id) };
+
+    case 'SET_ATTENDANCE': {
+      const idx = state.attendance.findIndex(
+        (a) => a.staffId === action.record.staffId && a.date === action.record.date
+      );
+      if (idx >= 0) {
+        return {
+          ...state,
+          attendance: state.attendance.map((a, i) => (i === idx ? action.record : a)),
+        };
+      }
+      return { ...state, attendance: [...state.attendance, action.record] };
+    }
+    case 'DELETE_ATTENDANCE':
+      return { ...state, attendance: state.attendance.filter((a) => a.id !== action.id) };
+
     default:
       return state;
   }
@@ -80,15 +99,20 @@ function loadState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Migrate: add parLevel if missing from older saved data
-      parsed.inventory = parsed.inventory.map((item: InventoryItem) => ({
+      // Migrate inventory: add parLevel if missing
+      parsed.inventory = (parsed.inventory ?? INITIAL_INVENTORY).map((item: InventoryItem) => ({
         ...item,
         parLevel: item.parLevel ?? item.minThreshold * 2,
       }));
+      // Migrate: add staff/attendance if missing (older saves had orders instead)
+      if (!parsed.staff) parsed.staff = INITIAL_STAFF;
+      if (!parsed.attendance) parsed.attendance = [];
+      // Remove orders key if present
+      delete parsed.orders;
       return parsed;
     }
   } catch {}
-  return { inventory: INITIAL_INVENTORY, orders: INITIAL_ORDERS };
+  return { inventory: INITIAL_INVENTORY, staff: INITIAL_STAFF, attendance: [] };
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {

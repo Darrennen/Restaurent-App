@@ -1,4 +1,4 @@
-export type Screen = 'dashboard' | 'restock' | 'inventory' | 'orders' | 'settings';
+export type Screen = 'dashboard' | 'restock' | 'inventory' | 'attendance' | 'settings';
 
 export interface InventoryItem {
   id: string;
@@ -12,21 +12,22 @@ export interface InventoryItem {
   parLevel: number;
 }
 
-export interface OrderItem {
+export interface StaffMember {
+  id: string;
   name: string;
-  quantity: number;
+  role: string;
+  hourlyRate: number;
 }
 
-export interface Order {
+export interface AttendanceRecord {
   id: string;
-  table: string;
-  items: OrderItem[];
-  status: 'pending' | 'preparing' | 'ready' | 'served';
-  time: string;
-  createdAt: number;
+  staffId: string;
+  date: string; // YYYY-MM-DD
+  hoursWorked: number;
 }
 
 export interface AppState {
   inventory: InventoryItem[];
-  orders: Order[];
+  staff: StaffMember[];
+  attendance: AttendanceRecord[];
 }

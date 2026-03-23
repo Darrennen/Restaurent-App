@@ -2,11 +2,12 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   LayoutDashboard,
   Package,
-  ClipboardList,
+  Users,
   Settings,
   LogOut,
   Plus,
   Search,
+  ChevronLeft,
   ChevronRight,
   AlertCircle,
   TrendingUp,
@@ -20,17 +21,16 @@ import {
   RefreshCw,
   ShoppingCart,
   CheckCircle2,
+  Banknote,
+  Minus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppProvider, useApp } from './context';
 import { askAI, getReorderSuggestions } from './ai';
-import type { Screen, InventoryItem, Order, OrderItem } from './types';
+import type { Screen, InventoryItem, StaffMember, AttendanceRecord } from './types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function formatTime(date: Date) {
-  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
 
 function newId(prefix: string) {
   return `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -56,19 +56,6 @@ const StatusBadge = ({ status }: { status: InventoryItem['status'] }) => {
   return <span className={`status-block ${styles[status]}`}>{status}</span>;
 };
 
-const OrderStatusBadge = ({ status }: { status: Order['status'] }) => {
-  const styles: Record<Order['status'], string> = {
-    pending: 'bg-secondary-container text-on-secondary-container',
-    preparing: 'bg-primary text-on-primary',
-    ready: 'bg-emerald-100 text-emerald-800',
-    served: 'bg-surface-container-high text-on-surface-variant',
-  };
-  return (
-    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-sm ${styles[status]}`}>
-      {status}
-    </span>
-  );
-};
 
 const Modal = ({
   title,
@@ -271,115 +258,6 @@ function InventoryModal({
   );
 }
 
-// ─── Order Modal ─────────────────────────────────────────────────────────────
-
-function OrderModal({ onClose }: { onClose: () => void }) {
-  const { dispatch } = useApp();
-  const [table, setTable] = useState('');
-  const [items, setItems] = useState<OrderItem[]>([{ name: '', quantity: 1 }]);
-
-  function addItem() {
-    setItems((prev) => [...prev, { name: '', quantity: 1 }]);
-  }
-
-  function updateItem(i: number, field: keyof OrderItem, value: string | number) {
-    setItems((prev) =>
-      prev.map((item, idx) => (idx === i ? { ...item, [field]: value } : item))
-    );
-  }
-
-  function removeItem(i: number) {
-    setItems((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  function handleCreate() {
-    const validItems = items.filter((i) => i.name.trim());
-    if (!table.trim() || validItems.length === 0) return;
-    const now = new Date();
-    dispatch({
-      type: 'ADD_ORDER',
-      order: {
-        id: newId('ORD'),
-        table: table.toUpperCase(),
-        items: validItems,
-        status: 'pending',
-        time: formatTime(now),
-        createdAt: now.getTime(),
-      },
-    });
-    onClose();
-  }
-
-  return (
-    <Modal title="New Order" onClose={onClose}>
-      <div className="space-y-4">
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
-            Table
-          </label>
-          <input
-            className="input-industrial w-full"
-            placeholder="e.g. T-05"
-            value={table}
-            onChange={(e) => setTable(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2 block">
-            Items
-          </label>
-          <div className="space-y-2">
-            {items.map((item, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <input
-                  className="input-industrial flex-1 min-w-0"
-                  placeholder="Item name"
-                  value={item.name}
-                  onChange={(e) => updateItem(i, 'name', e.target.value)}
-                />
-                <input
-                  type="number"
-                  min="1"
-                  className="input-industrial w-16 text-center"
-                  value={item.quantity}
-                  onChange={(e) =>
-                    updateItem(i, 'quantity', parseInt(e.target.value) || 1)
-                  }
-                />
-                {items.length > 1 && (
-                  <button
-                    onClick={() => removeItem(i)}
-                    className="text-error hover:bg-error/10 p-1.5 rounded"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={addItem}
-            className="btn-tertiary text-sm mt-2 px-0 flex items-center gap-1"
-          >
-            <Plus size={14} /> Add Item
-          </button>
-        </div>
-        <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="btn-secondary flex-1">
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            className="btn-primary flex-1"
-            disabled={!table.trim() || items.every((i) => !i.name.trim())}
-          >
-            Create Order
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 // ─── AI Assistant Panel ───────────────────────────────────────────────────────
 
@@ -412,7 +290,7 @@ function AIAssistant({ onClose }: { onClose: () => void }) {
     setMessages((m) => [...m, { role: 'user', text: userMsg }]);
     setLoading(true);
     try {
-      const reply = await askAI(userMsg, state.inventory, state.orders);
+      const reply = await askAI(userMsg, state.inventory, []);
       setMessages((m) => [...m, { role: 'ai', text: reply }]);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -586,6 +464,79 @@ function AlertsPanel({
         </div>
       </motion.div>
     </div>
+  );
+}
+
+// ─── Staff Modal ──────────────────────────────────────────────────────────────
+
+const ROLES = ['Head Chef', 'Sous Chef', 'Chef', 'Waiter', 'Bartender', 'Cashier', 'Manager', 'Cleaner', 'Other'];
+
+function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: () => void }) {
+  const { dispatch } = useApp();
+  const [form, setForm] = useState({
+    name: member?.name ?? '',
+    role: member?.role ?? 'Waiter',
+    hourlyRate: member?.hourlyRate?.toString() ?? '',
+  });
+
+  function handleSave() {
+    if (!form.name.trim() || !form.hourlyRate) return;
+    const rate = parseFloat(form.hourlyRate);
+    if (isNaN(rate) || rate < 0) return;
+    if (member) {
+      dispatch({ type: 'UPDATE_STAFF', member: { ...member, name: form.name.trim(), role: form.role, hourlyRate: rate } });
+    } else {
+      dispatch({ type: 'ADD_STAFF', member: { id: newId('STF'), name: form.name.trim(), role: form.role, hourlyRate: rate } });
+    }
+    onClose();
+  }
+
+  return (
+    <Modal title={member ? 'Edit Staff' : 'Add Staff'} onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Name</label>
+          <input
+            className="input-industrial w-full"
+            placeholder="e.g. Alice Chen"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Role</label>
+          <select
+            className="input-industrial w-full"
+            value={form.role}
+            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+          >
+            {ROLES.map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Hourly Rate ($)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            className="input-industrial w-full"
+            placeholder="e.g. 15"
+            value={form.hourlyRate}
+            onChange={(e) => setForm((f) => ({ ...f, hourlyRate: e.target.value }))}
+          />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button
+            onClick={handleSave}
+            className="btn-primary flex-1"
+            disabled={!form.name.trim() || !form.hourlyRate}
+          >
+            {member ? 'Save Changes' : 'Add Staff'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -816,7 +767,7 @@ const Sidebar = ({
     { id: 'dashboard' as Screen, icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'restock' as Screen, icon: ShoppingCart, label: 'Restock' },
     { id: 'inventory' as Screen, icon: Package, label: 'Inventory' },
-    { id: 'orders' as Screen, icon: ClipboardList, label: 'Orders' },
+    { id: 'attendance' as Screen, icon: Users, label: 'Attendance' },
   ];
 
   return (
@@ -929,9 +880,10 @@ const QuickActionRail = ({
 
 function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { state } = useApp();
-  const activeOrders = state.orders.filter((o) => o.status !== 'served');
+  const today = toDateStr(new Date());
   const stockAlerts = state.inventory.filter((i) => i.status !== 'healthy');
   const criticalCount = stockAlerts.filter((i) => i.status === 'critical').length;
+  const presentToday = state.attendance.filter((a) => a.date === today && a.hoursWorked > 0);
 
   return (
     <motion.div
@@ -947,17 +899,18 @@ function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             day: 'numeric',
           })}
         </p>
-        <h1 className="text-5xl font-bold">Kitchen Pulse</h1>
+        <h1 className="text-5xl font-bold">Overview</h1>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {[
           {
-            label: 'Active Orders',
-            value: activeOrders.length.toString().padStart(2, '0'),
-            sub: `${activeOrders.filter((o) => o.status === 'pending').length} pending`,
-            icon: ClipboardList,
+            label: 'Staff Today',
+            value: presentToday.length.toString().padStart(2, '0'),
+            sub: `of ${state.staff.length} staff members`,
+            icon: Users,
             color: 'text-primary',
+            screen: 'attendance' as Screen,
           },
           {
             label: 'Stock Alerts',
@@ -965,6 +918,7 @@ function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             sub: `${criticalCount} critical item${criticalCount !== 1 ? 's' : ''}`,
             icon: AlertCircle,
             color: 'text-error',
+            screen: 'restock' as Screen,
           },
           {
             label: 'Items in Stock',
@@ -972,11 +926,13 @@ function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             sub: `${state.inventory.filter((i) => i.status === 'healthy').length} healthy`,
             icon: TrendingUp,
             color: 'text-emerald-700',
+            screen: 'inventory' as Screen,
           },
         ].map((stat, i) => (
-          <div
+          <button
             key={i}
-            className="bg-surface-container-lowest p-8 rounded-md shadow-ambient border-l-4 border-primary"
+            onClick={() => setScreen(stat.screen)}
+            className="bg-surface-container-lowest p-8 rounded-md shadow-ambient border-l-4 border-primary text-left hover:bg-surface transition-colors"
           >
             <div className="flex justify-between items-start mb-4">
               <span className="text-on-surface-variant text-xs font-bold uppercase tracking-tighter">
@@ -986,52 +942,54 @@ function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
             <div className="text-6xl font-display font-bold mb-2">{stat.value}</div>
             <p className="text-on-surface-variant text-sm">{stat.sub}</p>
-          </div>
+          </button>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        {/* Today's attendance */}
         <section className="bg-surface-container-low p-8 rounded-md">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-bold">Recent Orders</h2>
-            <button onClick={() => setScreen('orders')} className="btn-tertiary text-sm">
+            <h2 className="text-2xl font-bold">Today's Staff</h2>
+            <button onClick={() => setScreen('attendance')} className="btn-tertiary text-sm">
               View All
             </button>
           </div>
-          <div className="space-y-4">
-            {activeOrders.slice(0, 3).map((order) => (
-              <div
-                key={order.id}
-                className="bg-surface-container-lowest p-6 rounded-md flex justify-between items-center"
-              >
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-display font-bold text-lg">{order.table}</span>
-                    <span className="text-xs text-on-surface-variant font-mono">{order.id}</span>
+          <div className="space-y-3">
+            {state.staff.slice(0, 4).map((member) => {
+              const record = state.attendance.find((a) => a.staffId === member.id && a.date === today);
+              const hours = record?.hoursWorked ?? 0;
+              return (
+                <div key={member.id} className="bg-surface-container-lowest p-4 rounded-md flex justify-between items-center">
+                  <div>
+                    <div className="font-bold">{member.name}</div>
+                    <div className="text-xs text-on-surface-variant">{member.role}</div>
                   </div>
-                  <p className="text-sm text-on-surface-variant">
-                    {order.items.map((i) => `${i.name} x${i.quantity}`).join(', ')}
-                  </p>
+                  <div className="text-right">
+                    {hours > 0 ? (
+                      <>
+                        <div className="text-xs font-bold text-emerald-600">Present</div>
+                        <div className="text-sm">{hours} hrs</div>
+                      </>
+                    ) : (
+                      <div className="text-xs text-on-surface-variant">Not marked</div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold mb-1">{order.time}</div>
-                  <OrderStatusBadge status={order.status} />
-                </div>
-              </div>
-            ))}
-            {activeOrders.length === 0 && (
-              <p className="text-on-surface-variant text-sm text-center py-8">
-                No active orders
-              </p>
+              );
+            })}
+            {state.staff.length === 0 && (
+              <p className="text-on-surface-variant text-sm text-center py-8">No staff added yet.</p>
             )}
           </div>
         </section>
 
+        {/* Inventory watch */}
         <section className="bg-surface-container-low p-8 rounded-md">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-2xl font-bold">Inventory Watch</h2>
-            <button onClick={() => setScreen('inventory')} className="btn-tertiary text-sm">
-              Manage
+            <button onClick={() => setScreen('restock')} className="btn-tertiary text-sm">
+              Restock
             </button>
           </div>
           <div className="space-y-4">
@@ -1230,183 +1188,278 @@ function Inventory({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-// ─── Orders Screen ────────────────────────────────────────────────────────────
+// ─── Attendance Screen ────────────────────────────────────────────────────────
 
-const STATUS_FLOW: Record<Order['status'], Order['status'] | null> = {
-  pending: 'preparing',
-  preparing: 'ready',
-  ready: 'served',
-  served: null,
-};
+function toDateStr(date: Date) {
+  return date.toISOString().split('T')[0]; // YYYY-MM-DD
+}
 
-const STATUS_LABEL: Record<Order['status'], string> = {
-  pending: 'Start Prep',
-  preparing: 'Mark Ready',
-  ready: 'Serve',
-  served: 'Done',
-};
-
-function Orders({ onAdd }: { onAdd: () => void }) {
+function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
   const { state, dispatch } = useApp();
-  const [filter, setFilter] = useState<Order['status'] | 'all'>('all');
-  const [showHistory, setShowHistory] = useState(false);
+  const [tab, setTab] = useState<'daily' | 'salary'>('daily');
+  const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
+  const [salaryMonth, setSalaryMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [editStaff, setEditStaff] = useState<StaffMember | null>(null);
+  const [showStaffModal, setShowStaffModal] = useState(false);
 
-  const active = state.orders.filter((o) => o.status !== 'served');
-  const history = state.orders.filter((o) => o.status === 'served');
-  const displayed = showHistory
-    ? history
-    : filter === 'all'
-    ? active
-    : active.filter((o) => o.status === filter);
-
-  function advance(id: string, status: Order['status']) {
-    const next = STATUS_FLOW[status];
-    if (next) dispatch({ type: 'UPDATE_ORDER_STATUS', id, status: next });
+  // Navigate date
+  function shiftDate(days: number) {
+    const d = new Date(selectedDate + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    setSelectedDate(toDateStr(d));
   }
 
-  function voidOrder(id: string) {
-    if (confirm('Void this order?')) dispatch({ type: 'DELETE_ORDER', id });
+  // Get hours worked for a staff member on the selected date
+  function getHours(staffId: string): number {
+    return state.attendance.find((a) => a.staffId === staffId && a.date === selectedDate)?.hoursWorked ?? 0;
   }
+
+  // Update hours for a staff member
+  function setHours(staffId: string, hours: number) {
+    const h = Math.max(0, Math.round(hours * 2) / 2); // round to 0.5
+    dispatch({
+      type: 'SET_ATTENDANCE',
+      record: {
+        id: `${staffId}-${selectedDate}`,
+        staffId,
+        date: selectedDate,
+        hoursWorked: h,
+      },
+    });
+  }
+
+  // Salary summary for selected month
+  const salaryData = useMemo(() => {
+    return state.staff.map((member) => {
+      const records = state.attendance.filter(
+        (a) => a.staffId === member.id && a.date.startsWith(salaryMonth) && a.hoursWorked > 0
+      );
+      const totalHours = records.reduce((sum, r) => sum + r.hoursWorked, 0);
+      const daysPresent = records.length;
+      const totalPay = totalHours * member.hourlyRate;
+      return { member, totalHours, daysPresent, totalPay };
+    });
+  }, [state.staff, state.attendance, salaryMonth]);
+
+  const grandTotal = salaryData.reduce((sum, r) => sum + r.totalPay, 0);
+
+  const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="space-y-8"
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+      {showStaffModal && (
+        <AnimatePresence>
+          <StaffModal
+            member={editStaff}
+            onClose={() => { setShowStaffModal(false); setEditStaff(null); }}
+          />
+        </AnimatePresence>
+      )}
+
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-5xl font-bold mb-2">Orders</h1>
-          <p className="text-on-surface-variant">Real-time kitchen display system.</p>
+          <h1 className="text-5xl font-bold mb-2">Attendance</h1>
+          <p className="text-on-surface-variant">{state.staff.length} staff members</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowHistory((v) => !v)}
-            className={showHistory ? 'btn-primary' : 'btn-secondary'}
-          >
-            {showHistory ? 'Live Orders' : 'History'}
-          </button>
-          {!showHistory && (
-            <button onClick={onAdd} className="btn-primary">
-              New Order
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => { setEditStaff(null); setShowStaffModal(true); onAddStaff(); }}
+          className="btn-primary flex items-center gap-2"
+        >
+          <Plus size={18} /> Add Staff
+        </button>
       </header>
 
-      {!showHistory && (
-        <div className="flex gap-2">
-          {(['all', 'pending', 'preparing', 'ready'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize ${
-                filter === f
-                  ? 'bg-inverse-surface text-on-inverse-surface'
-                  : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
-              }`}
-            >
-              {f === 'all'
-                ? `All (${active.length})`
-                : `${f} (${active.filter((o) => o.status === f).length})`}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {(['daily', 'salary'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize ${
+              tab === t
+                ? 'bg-inverse-surface text-on-inverse-surface'
+                : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+            }`}
+          >
+            {t === 'daily' ? 'Daily Attendance' : 'Salary Report'}
+          </button>
+        ))}
+      </div>
 
-      {showHistory && (
-        <div className="bg-surface-container-low p-4 rounded-md">
-          <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider mb-3">
-            Served Orders ({history.length})
-          </h3>
-          {history.length === 0 ? (
-            <p className="text-on-surface-variant text-sm">No served orders yet.</p>
+      {/* ── Daily Attendance ── */}
+      {tab === 'daily' && (
+        <div className="space-y-6">
+          {/* Date navigator */}
+          <div className="flex items-center gap-4 bg-surface-container-lowest rounded-md px-6 py-4">
+            <button onClick={() => shiftDate(-1)} className="p-2 hover:bg-surface-container-high rounded-md transition-colors">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex-1 text-center">
+              <div className="font-bold text-lg">{displayDate}</div>
+              <div className="text-xs text-on-surface-variant font-mono">{selectedDate}</div>
+            </div>
+            <button
+              onClick={() => shiftDate(1)}
+              disabled={selectedDate >= toDateStr(new Date())}
+              className="p-2 hover:bg-surface-container-high rounded-md transition-colors disabled:opacity-30"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
+          {state.staff.length === 0 ? (
+            <div className="text-center py-16 text-on-surface-variant bg-surface-container-lowest rounded-md">
+              <Users size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="font-bold">No staff yet</p>
+              <p className="text-sm mt-1">Add staff members to start tracking attendance.</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {history.map((o) => (
-                <div
-                  key={o.id}
-                  className="bg-surface-container-lowest px-4 py-3 rounded flex justify-between items-center text-sm gap-4"
-                >
-                  <span className="font-bold">{o.table}</span>
-                  <span className="text-on-surface-variant font-mono text-xs">{o.id}</span>
-                  <span className="text-on-surface-variant flex-1 truncate">
-                    {o.items.map((i) => `${i.name} x${i.quantity}`).join(', ')}
-                  </span>
-                  <span className="text-on-surface-variant">{o.time}</span>
-                  <button
-                    onClick={() => dispatch({ type: 'DELETE_ORDER', id: o.id })}
-                    className="text-error hover:bg-error/10 p-1 rounded"
+            <div className="space-y-3">
+              {state.staff.map((member) => {
+                const hours = getHours(member.id);
+                const present = hours > 0;
+                return (
+                  <div
+                    key={member.id}
+                    className={`bg-surface-container-lowest rounded-md p-5 flex items-center gap-4 border-l-4 ${
+                      present ? 'border-emerald-500' : 'border-surface-container-high'
+                    }`}
                   >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+                    {/* Name */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold">{member.name}</div>
+                      <div className="text-xs text-on-surface-variant">{member.role} · ${member.hourlyRate}/hr</div>
+                    </div>
+
+                    {/* Hours stepper */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setHours(member.id, hours - 0.5)}
+                        disabled={hours <= 0}
+                        className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-surface-container-highest transition-colors disabled:opacity-30"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <div className="text-center w-16">
+                        <input
+                          type="number"
+                          min="0"
+                          max="24"
+                          step="0.5"
+                          value={hours}
+                          onChange={(e) => setHours(member.id, parseFloat(e.target.value) || 0)}
+                          className="input-industrial w-full text-center text-lg font-bold py-1"
+                        />
+                        <div className="text-[10px] text-on-surface-variant mt-0.5">hrs</div>
+                      </div>
+                      <button
+                        onClick={() => setHours(member.id, hours + 0.5)}
+                        className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-surface-container-highest transition-colors"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+
+                    {/* Status + pay for that day */}
+                    <div className="text-right min-w-[80px]">
+                      {present ? (
+                        <>
+                          <div className="text-xs font-bold text-emerald-600 uppercase">Present</div>
+                          <div className="text-sm font-bold">${(hours * member.hourlyRate).toFixed(2)}</div>
+                        </>
+                      ) : (
+                        <div className="text-xs font-bold text-on-surface-variant uppercase">Absent</div>
+                      )}
+                    </div>
+
+                    {/* Edit/delete staff */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => { setEditStaff(member); setShowStaffModal(true); }}
+                        className="p-2 hover:bg-surface-container-highest rounded-md transition-colors text-on-surface-variant"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove ${member.name} and all their attendance records?`))
+                            dispatch({ type: 'DELETE_STAFF', id: member.id });
+                        }}
+                        className="p-2 hover:bg-error/10 rounded-md transition-colors text-error"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {!showHistory && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {displayed.map((order) => (
-            <div
-              key={order.id}
-              className="bg-surface-container-lowest rounded-md shadow-ambient flex flex-col"
-            >
-              <div
-                className={`h-1.5 w-full rounded-t-md ${
-                  order.status === 'pending'
-                    ? 'bg-primary-container'
-                    : order.status === 'preparing'
-                    ? 'bg-primary'
-                    : 'bg-emerald-500'
-                }`}
-              />
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-3xl font-display font-bold">{order.table}</h3>
-                    <span className="text-xs text-on-surface-variant font-mono">{order.id}</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold">{order.time}</div>
-                    <OrderStatusBadge status={order.status} />
-                  </div>
-                </div>
+      {/* ── Salary Report ── */}
+      {tab === 'salary' && (
+        <div className="space-y-6">
+          {/* Month picker */}
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-bold text-on-surface-variant uppercase tracking-wider">Month</label>
+            <input
+              type="month"
+              value={salaryMonth}
+              onChange={(e) => setSalaryMonth(e.target.value)}
+              className="input-industrial"
+            />
+          </div>
 
-                <div className="space-y-3 mb-8 flex-1">
-                  {order.items.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-on-surface-variant">
-                        {item.quantity}
-                      </div>
-                      <span className="text-on-surface font-medium">{item.name}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-auto pt-6 border-t border-surface-container-high flex gap-3">
-                  <button
-                    onClick={() => voidOrder(order.id)}
-                    className="flex-1 btn-secondary text-xs py-2 flex items-center justify-center gap-1"
-                  >
-                    <Trash2 size={12} /> Void
-                  </button>
-                  <button
-                    onClick={() => advance(order.id, order.status)}
-                    disabled={STATUS_FLOW[order.status] === null}
-                    className="flex-[2] btn-primary text-xs py-2 disabled:opacity-50"
-                  >
-                    {STATUS_LABEL[order.status]}
-                  </button>
-                </div>
-              </div>
+          {state.staff.length === 0 ? (
+            <div className="text-center py-16 text-on-surface-variant bg-surface-container-lowest rounded-md">
+              <Banknote size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="font-bold">No staff yet</p>
             </div>
-          ))}
-          {displayed.length === 0 && (
-            <div className="col-span-3 text-center py-16 text-on-surface-variant">
-              No {filter === 'all' ? 'active' : filter} orders.
+          ) : (
+            <div className="bg-surface-container-lowest rounded-md shadow-ambient overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface-container-low text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
+                    <th className="px-6 py-4">Staff</th>
+                    <th className="px-6 py-4">Role</th>
+                    <th className="px-6 py-4 text-right">Days</th>
+                    <th className="px-6 py-4 text-right">Hours</th>
+                    <th className="px-6 py-4 text-right">Rate</th>
+                    <th className="px-6 py-4 text-right">Total Pay</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-container-high">
+                  {salaryData.map(({ member, totalHours, daysPresent, totalPay }) => (
+                    <tr key={member.id} className="hover:bg-surface transition-colors">
+                      <td className="px-6 py-4 font-bold">{member.name}</td>
+                      <td className="px-6 py-4 text-sm text-on-surface-variant">{member.role}</td>
+                      <td className="px-6 py-4 text-right">{daysPresent}</td>
+                      <td className="px-6 py-4 text-right">{totalHours}</td>
+                      <td className="px-6 py-4 text-right text-sm text-on-surface-variant">${member.hourlyRate}/hr</td>
+                      <td className="px-6 py-4 text-right font-display font-bold text-lg">
+                        ${totalPay.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-inverse-surface text-on-inverse-surface">
+                    <td colSpan={5} className="px-6 py-4 font-bold uppercase tracking-wider text-sm">
+                      Total Payroll
+                    </td>
+                    <td className="px-6 py-4 text-right font-display font-bold text-2xl">
+                      ${grandTotal.toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           )}
         </div>
@@ -1489,13 +1542,11 @@ function SettingsScreen() {
 function AppInner() {
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [showAddInventory, setShowAddInventory] = useState(false);
-  const [showAddOrder, setShowAddOrder] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
 
   function handleAdd() {
-    if (screen === 'orders') setShowAddOrder(true);
-    else setShowAddInventory(true);
+    setShowAddInventory(true);
   }
 
 
@@ -1509,7 +1560,7 @@ function AppInner() {
           {screen === 'dashboard' && <Dashboard setScreen={setScreen} />}
           {screen === 'restock' && <RestockScreen onAdd={() => setShowAddInventory(true)} />}
           {screen === 'inventory' && <Inventory onAdd={() => setShowAddInventory(true)} />}
-          {screen === 'orders' && <Orders onAdd={() => setShowAddOrder(true)} />}
+          {screen === 'attendance' && <AttendanceScreen onAddStaff={() => {}} />}
           {screen === 'settings' && <SettingsScreen />}
         </div>
       </main>
@@ -1524,7 +1575,6 @@ function AppInner() {
         {showAddInventory && (
           <InventoryModal item={null} onClose={() => setShowAddInventory(false)} />
         )}
-        {showAddOrder && <OrderModal onClose={() => setShowAddOrder(false)} />}
         {showAI && <AIAssistant onClose={() => setShowAI(false)} />}
         {showAlerts && (
           <AlertsPanel onClose={() => setShowAlerts(false)} setScreen={setScreen} />
