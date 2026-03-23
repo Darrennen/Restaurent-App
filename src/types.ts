@@ -1,4 +1,4 @@
-export type Screen = 'dashboard' | 'restock' | 'inventory' | 'attendance' | 'settings';
+export type Screen = 'dashboard' | 'restock' | 'inventory' | 'attendance' | 'kiosk' | 'settings';
 
 export interface InventoryItem {
   id: string;
@@ -17,6 +17,7 @@ export interface StaffMember {
   name: string;
   role: string;
   hourlyRate: number;
+  pin: string; // 4-digit PIN for kiosk clock-in
 }
 
 export interface AttendanceRecord {
@@ -24,6 +25,8 @@ export interface AttendanceRecord {
   staffId: string;
   date: string; // YYYY-MM-DD
   hoursWorked: number;
+  clockIn?: string;  // ISO timestamp
+  clockOut?: string; // ISO timestamp
 }
 
 export interface AppState {

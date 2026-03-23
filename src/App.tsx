@@ -23,11 +23,12 @@ import {
   CheckCircle2,
   Banknote,
   Minus,
+  LogIn,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppProvider, useApp } from './context';
 import { askAI, getReorderSuggestions } from './ai';
-import type { Screen, InventoryItem, StaffMember, AttendanceRecord } from './types';
+import type { Screen, InventoryItem, StaffMember } from './types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -472,21 +473,26 @@ function AlertsPanel({
 const ROLES = ['Head Chef', 'Sous Chef', 'Chef', 'Waiter', 'Bartender', 'Cashier', 'Manager', 'Cleaner', 'Other'];
 
 function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: () => void }) {
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const [form, setForm] = useState({
     name: member?.name ?? '',
     role: member?.role ?? 'Waiter',
     hourlyRate: member?.hourlyRate?.toString() ?? '',
+    pin: member?.pin ?? '',
   });
+  const [pinError, setPinError] = useState('');
 
   function handleSave() {
-    if (!form.name.trim() || !form.hourlyRate) return;
+    if (!form.name.trim() || !form.hourlyRate || !form.pin) return;
     const rate = parseFloat(form.hourlyRate);
     if (isNaN(rate) || rate < 0) return;
+    if (!/^\d{4}$/.test(form.pin)) { setPinError('PIN must be exactly 4 digits'); return; }
+    const duplicate = state.staff.find((s) => s.pin === form.pin && s.id !== member?.id);
+    if (duplicate) { setPinError(`PIN already used by ${duplicate.name}`); return; }
     if (member) {
-      dispatch({ type: 'UPDATE_STAFF', member: { ...member, name: form.name.trim(), role: form.role, hourlyRate: rate } });
+      dispatch({ type: 'UPDATE_STAFF', member: { ...member, name: form.name.trim(), role: form.role, hourlyRate: rate, pin: form.pin } });
     } else {
-      dispatch({ type: 'ADD_STAFF', member: { id: newId('STF'), name: form.name.trim(), role: form.role, hourlyRate: rate } });
+      dispatch({ type: 'ADD_STAFF', member: { id: newId('STF'), name: form.name.trim(), role: form.role, hourlyRate: rate, pin: form.pin } });
     }
     onClose();
   }
@@ -525,12 +531,30 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
             onChange={(e) => setForm((f) => ({ ...f, hourlyRate: e.target.value }))}
           />
         </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+            Kiosk PIN <span className="font-normal normal-case">(4 digits — staff use this to clock in)</span>
+          </label>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            className="input-industrial w-full tracking-widest text-xl"
+            placeholder="••••"
+            value={form.pin}
+            onChange={(e) => {
+              setPinError('');
+              setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+            }}
+          />
+          {pinError && <p className="text-xs text-error mt-1">{pinError}</p>}
+        </div>
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button
             onClick={handleSave}
             className="btn-primary flex-1"
-            disabled={!form.name.trim() || !form.hourlyRate}
+            disabled={!form.name.trim() || !form.hourlyRate || form.pin.length !== 4}
           >
             {member ? 'Save Changes' : 'Add Staff'}
           </button>
@@ -754,6 +778,186 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+// ─── Kiosk Screen ─────────────────────────────────────────────────────────────
+
+function KioskScreen() {
+  const { state, dispatch } = useApp();
+  const [pin, setPin] = useState('');
+  const [found, setFound] = useState<StaffMember | null>(null);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [tick, setTick] = useState(new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-lookup once 4 digits entered
+  useEffect(() => {
+    if (pin.length === 4 && !found && !message) {
+      const match = state.staff.find((s) => s.pin === pin);
+      if (match) {
+        setFound(match);
+      } else {
+        setMessage({ text: 'PIN not recognised. Try again.', ok: false });
+        setTimeout(() => { setPin(''); setMessage(null); }, 2000);
+      }
+    }
+  }, [pin]);
+
+  const today = toDateStr(tick);
+  const todayRecord = found
+    ? state.attendance.find((a) => a.staffId === found.id && a.date === today)
+    : null;
+  const clockedIn = !!todayRecord?.clockIn && !todayRecord?.clockOut;
+
+  function handleAction() {
+    if (!found) return;
+    const now = new Date();
+    const ts = now.toISOString();
+    const date = toDateStr(now);
+    if (clockedIn) {
+      dispatch({ type: 'CLOCK_OUT', staffId: found.id, date, timestamp: ts });
+      const ms = todayRecord?.clockIn
+        ? now.getTime() - new Date(todayRecord.clockIn).getTime()
+        : 0;
+      const hrs = (ms / 3600000).toFixed(1);
+      setMessage({ text: `Clocked out ✓ — ${hrs} hrs worked today`, ok: true });
+    } else {
+      dispatch({ type: 'CLOCK_IN', staffId: found.id, date, timestamp: ts });
+      setMessage({ text: 'Clocked in ✓ — Have a great shift!', ok: true });
+    }
+    setTimeout(reset, 3000);
+  }
+
+  function reset() {
+    setPin('');
+    setFound(null);
+    setMessage(null);
+  }
+
+  function numpadPress(val: string) {
+    if (found || message) return;
+    if (val === 'C') { setPin(''); return; }
+    if (val === '←') { setPin((p) => p.slice(0, -1)); return; }
+    if (pin.length < 4) setPin((p) => p + val);
+  }
+
+  const numpadKeys = ['1','2','3','4','5','6','7','8','9','C','0','←'];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center min-h-[80vh] gap-8 select-none"
+    >
+      {/* Live clock */}
+      <div className="text-center">
+        <div className="text-7xl font-display font-bold tracking-tight">
+          {tick.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+        </div>
+        <div className="text-on-surface-variant text-sm mt-1">
+          {tick.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </div>
+      </div>
+
+      {/* Staff info after PIN matched */}
+      {found && !message && (
+        <div className="text-center">
+          <div className="text-3xl font-bold">{found.name}</div>
+          <div className="text-on-surface-variant mt-1">{found.role}</div>
+          {clockedIn && todayRecord?.clockIn && (
+            <div className="text-sm text-on-surface-variant mt-2">
+              Clocked in at{' '}
+              {new Date(todayRecord.clockIn).toLocaleTimeString('en-US', {
+                hour: '2-digit', minute: '2-digit', hour12: false,
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Feedback message */}
+      {message && (
+        <div
+          className={`text-center px-10 py-5 rounded-md text-xl font-bold ${
+            message.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-error/10 text-error'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      {/* PIN dots */}
+      {!found && !message && (
+        <div className="text-center">
+          <div className="text-xs text-on-surface-variant uppercase tracking-widest mb-4">
+            Enter your PIN
+          </div>
+          <div className="flex gap-4 justify-center">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className={`w-5 h-5 rounded-full border-2 transition-all ${
+                  i < pin.length
+                    ? 'bg-primary border-primary scale-110'
+                    : 'border-on-surface-variant'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Clock In / Out button */}
+      {found && !message && (
+        <div className="flex gap-4">
+          <button onClick={reset} className="btn-secondary px-8 py-4 text-lg">
+            Cancel
+          </button>
+          <button
+            onClick={handleAction}
+            className={`px-10 py-4 rounded-md text-lg font-bold transition-all shadow-lg ${
+              clockedIn
+                ? 'bg-error text-on-error hover:bg-error/90'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
+          >
+            {clockedIn ? 'Clock Out' : 'Clock In'}
+          </button>
+        </div>
+      )}
+
+      {/* Numpad */}
+      {!found && !message && (
+        <div className="grid grid-cols-3 gap-3 w-60">
+          {numpadKeys.map((k) => (
+            <button
+              key={k}
+              onClick={() => numpadPress(k)}
+              className={`h-16 rounded-md text-xl font-bold transition-all active:scale-95 ${
+                k === 'C'
+                  ? 'bg-error/10 text-error hover:bg-error/20'
+                  : k === '←'
+                  ? 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+                  : 'bg-surface-container-lowest shadow-ambient hover:bg-surface text-on-surface'
+              }`}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {state.staff.length === 0 && (
+        <p className="text-sm text-on-surface-variant">
+          Add staff members and assign PINs in the Attendance screen first.
+        </p>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 const Sidebar = ({
@@ -765,6 +969,7 @@ const Sidebar = ({
 }) => {
   const navItems = [
     { id: 'dashboard' as Screen, icon: LayoutDashboard, label: 'Dashboard' },
+    { id: 'kiosk' as Screen, icon: LogIn, label: 'Clock In/Out' },
     { id: 'restock' as Screen, icon: ShoppingCart, label: 'Restock' },
     { id: 'inventory' as Screen, icon: Package, label: 'Inventory' },
     { id: 'attendance' as Screen, icon: Users, label: 'Attendance' },
@@ -1220,9 +1425,10 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
     return state.attendance.find((a) => a.staffId === staffId && a.date === selectedDate)?.hoursWorked ?? 0;
   }
 
-  // Update hours for a staff member
+  // Update hours for a staff member (preserve clock timestamps)
   function setHours(staffId: string, hours: number) {
     const h = Math.max(0, Math.round(hours * 2) / 2); // round to 0.5
+    const existing = state.attendance.find((a) => a.staffId === staffId && a.date === selectedDate);
     dispatch({
       type: 'SET_ATTENDANCE',
       record: {
@@ -1230,6 +1436,8 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
         staffId,
         date: selectedDate,
         hoursWorked: h,
+        clockIn: existing?.clockIn,
+        clockOut: existing?.clockOut,
       },
     });
   }
@@ -1326,6 +1534,9 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
               {state.staff.map((member) => {
                 const hours = getHours(member.id);
                 const present = hours > 0;
+                const record = state.attendance.find((a) => a.staffId === member.id && a.date === selectedDate);
+                const fmtTime = (ts?: string) =>
+                  ts ? new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
                 return (
                   <div
                     key={member.id}
@@ -1368,15 +1579,28 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
                       </button>
                     </div>
 
-                    {/* Status + pay for that day */}
-                    <div className="text-right min-w-[80px]">
+                    {/* Status + clock times + pay */}
+                    <div className="text-right min-w-[100px]">
                       {present ? (
                         <>
                           <div className="text-xs font-bold text-emerald-600 uppercase">Present</div>
                           <div className="text-sm font-bold">${(hours * member.hourlyRate).toFixed(2)}</div>
+                          {fmtTime(record?.clockIn) && (
+                            <div className="text-[10px] text-on-surface-variant mt-0.5">
+                              In {fmtTime(record?.clockIn)}
+                              {fmtTime(record?.clockOut) ? ` · Out ${fmtTime(record?.clockOut)}` : ' · Still in'}
+                            </div>
+                          )}
                         </>
                       ) : (
-                        <div className="text-xs font-bold text-on-surface-variant uppercase">Absent</div>
+                        <>
+                          <div className="text-xs font-bold text-on-surface-variant uppercase">Absent</div>
+                          {fmtTime(record?.clockIn) && (
+                            <div className="text-[10px] text-primary mt-0.5">
+                              In {fmtTime(record?.clockIn)} · Still in
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -1561,6 +1785,7 @@ function AppInner() {
       <main className="flex-1 overflow-y-auto relative pr-16">
         <div className="max-w-7xl mx-auto px-8 md:px-20 py-16">
           {screen === 'dashboard' && <Dashboard setScreen={setScreen} />}
+          {screen === 'kiosk' && <KioskScreen />}
           {screen === 'restock' && <RestockScreen onAdd={() => setShowAddInventory(true)} />}
           {screen === 'inventory' && <Inventory onAdd={() => setShowAddInventory(true)} />}
           {screen === 'attendance' && <AttendanceScreen onAddStaff={() => {}} />}

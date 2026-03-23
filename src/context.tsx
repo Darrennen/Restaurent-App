@@ -12,10 +12,10 @@ const INITIAL_INVENTORY: InventoryItem[] = [
 ];
 
 const INITIAL_STAFF: StaffMember[] = [
-  { id: 's1', name: 'Alice Chen', role: 'Head Chef', hourlyRate: 25 },
-  { id: 's2', name: 'Bob Tan', role: 'Sous Chef', hourlyRate: 18 },
-  { id: 's3', name: 'Carol Lim', role: 'Waiter', hourlyRate: 12 },
-  { id: 's4', name: 'David Wong', role: 'Cashier', hourlyRate: 12 },
+  { id: 's1', name: 'Alice Chen', role: 'Head Chef', hourlyRate: 25, pin: '1111' },
+  { id: 's2', name: 'Bob Tan', role: 'Sous Chef', hourlyRate: 18, pin: '2222' },
+  { id: 's3', name: 'Carol Lim', role: 'Waiter', hourlyRate: 12, pin: '3333' },
+  { id: 's4', name: 'David Wong', role: 'Cashier', hourlyRate: 12, pin: '4444' },
 ];
 
 // --- Actions ---
@@ -28,7 +28,9 @@ type Action =
   | { type: 'UPDATE_STAFF'; member: StaffMember }
   | { type: 'DELETE_STAFF'; id: string }
   | { type: 'SET_ATTENDANCE'; record: AttendanceRecord }
-  | { type: 'DELETE_ATTENDANCE'; id: string };
+  | { type: 'DELETE_ATTENDANCE'; id: string }
+  | { type: 'CLOCK_IN'; staffId: string; date: string; timestamp: string }
+  | { type: 'CLOCK_OUT'; staffId: string; date: string; timestamp: string };
 
 function computeStatus(quantity: number, minThreshold: number): InventoryItem['status'] {
   if (quantity <= 0) return 'critical';
@@ -68,15 +70,46 @@ function reducer(state: AppState, action: Action): AppState {
         (a) => a.staffId === action.record.staffId && a.date === action.record.date
       );
       if (idx >= 0) {
-        return {
-          ...state,
-          attendance: state.attendance.map((a, i) => (i === idx ? action.record : a)),
-        };
+        return { ...state, attendance: state.attendance.map((a, i) => (i === idx ? action.record : a)) };
       }
       return { ...state, attendance: [...state.attendance, action.record] };
     }
     case 'DELETE_ATTENDANCE':
       return { ...state, attendance: state.attendance.filter((a) => a.id !== action.id) };
+
+    case 'CLOCK_IN': {
+      const existing = state.attendance.find(
+        (a) => a.staffId === action.staffId && a.date === action.date
+      );
+      if (existing?.clockIn) return state; // already clocked in today
+      const updated: AttendanceRecord = existing
+        ? { ...existing, clockIn: action.timestamp }
+        : { id: `${action.staffId}-${action.date}`, staffId: action.staffId, date: action.date, hoursWorked: 0, clockIn: action.timestamp };
+      const idx = state.attendance.findIndex((a) => a.staffId === action.staffId && a.date === action.date);
+      return {
+        ...state,
+        attendance: idx >= 0
+          ? state.attendance.map((a, i) => (i === idx ? updated : a))
+          : [...state.attendance, updated],
+      };
+    }
+
+    case 'CLOCK_OUT': {
+      const idx = state.attendance.findIndex(
+        (a) => a.staffId === action.staffId && a.date === action.date
+      );
+      if (idx < 0) return state;
+      const record = state.attendance[idx];
+      if (!record.clockIn || record.clockOut) return state; // nothing to clock out of
+      const ms = new Date(action.timestamp).getTime() - new Date(record.clockIn).getTime();
+      const hoursWorked = Math.round((ms / 3600000) * 2) / 2; // round to nearest 0.5
+      return {
+        ...state,
+        attendance: state.attendance.map((a, i) =>
+          i === idx ? { ...a, clockOut: action.timestamp, hoursWorked } : a
+        ),
+      };
+    }
 
     default:
       return state;
@@ -99,15 +132,17 @@ function loadState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Migrate inventory: add parLevel if missing
       parsed.inventory = (parsed.inventory ?? INITIAL_INVENTORY).map((item: InventoryItem) => ({
         ...item,
         parLevel: item.parLevel ?? item.minThreshold * 2,
       }));
-      // Migrate: add staff/attendance if missing (older saves had orders instead)
       if (!parsed.staff) parsed.staff = INITIAL_STAFF;
+      // Migrate: add PIN to staff without one
+      parsed.staff = parsed.staff.map((s: StaffMember, i: number) => ({
+        ...s,
+        pin: s.pin ?? String(1001 + i),
+      }));
       if (!parsed.attendance) parsed.attendance = [];
-      // Remove orders key if present
       delete parsed.orders;
       return parsed;
     }
