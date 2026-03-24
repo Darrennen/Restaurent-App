@@ -612,7 +612,7 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
               day: 'numeric',
             })}
           </p>
-          <h1 className="text-5xl font-bold mb-2">Restock</h1>
+          <h1 className="text-3xl md:text-5xl font-bold mb-2">Restock</h1>
           <p className="text-on-surface-variant">
             {urgent.length === 0
               ? 'All items are well stocked.'
@@ -689,7 +689,7 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
                 </div>
 
                 {/* Current qty — tap to edit inline */}
-                <div className="text-center min-w-[90px]">
+                <div className="text-center min-w-[70px]">
                   <div className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Have</div>
                   {isEditing ? (
                     <div className="flex items-center gap-1">
@@ -733,7 +733,7 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
                 </div>
 
                 {/* Need to buy */}
-                <div className="text-center min-w-[90px]">
+                <div className="text-center min-w-[70px]">
                   <div className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Buy</div>
                   <div
                     className={`font-display font-bold text-xl ${
@@ -768,7 +768,7 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
                     className="btn-primary text-xs py-2 px-3 whitespace-nowrap"
                     title={`Set to par: ${item.parLevel} ${item.unit}`}
                   >
-                    Restocked ✓
+                    <span className="hidden sm:inline">Restocked </span>✓
                   </button>
                 )}
               </div>
@@ -916,7 +916,7 @@ function KioskScreen({ onManagerTap }: { onManagerTap?: () => void }) {
     >
       {/* Live clock */}
       <div className="text-center">
-        <div className="text-7xl font-display font-bold tracking-tight">
+        <div className="text-5xl md:text-7xl font-display font-bold tracking-tight">
           {tick.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
         </div>
         <div className="text-on-surface-variant text-sm mt-1">
@@ -1031,6 +1031,49 @@ function KioskScreen({ onManagerTap }: { onManagerTap?: () => void }) {
   );
 }
 
+// ─── Mobile Nav ──────────────────────────────────────────────────────────────
+
+const MobileNav = ({
+  activeScreen,
+  setScreen,
+  onLock,
+}: {
+  activeScreen: Screen;
+  setScreen: (s: Screen) => void;
+  onLock: () => void;
+}) => {
+  const items = [
+    { id: 'dashboard' as Screen, icon: LayoutDashboard, label: 'Home' },
+    { id: 'kiosk' as Screen, icon: LogIn, label: 'Clock' },
+    { id: 'restock' as Screen, icon: ShoppingCart, label: 'Restock' },
+    { id: 'inventory' as Screen, icon: Package, label: 'Stock' },
+    { id: 'attendance' as Screen, icon: Users, label: 'Staff' },
+  ];
+  return (
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-surface-container-high border-t border-surface-container-highest z-40 flex">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          onClick={() => setScreen(item.id)}
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 transition-colors ${
+            activeScreen === item.id ? 'text-primary' : 'text-on-surface-variant'
+          }`}
+        >
+          <item.icon size={20} />
+          <span className="text-[9px] font-medium">{item.label}</span>
+        </button>
+      ))}
+      <button
+        onClick={onLock}
+        className="flex-1 flex flex-col items-center justify-center py-3 gap-0.5 text-on-surface-variant"
+      >
+        <Lock size={20} />
+        <span className="text-[9px] font-medium">Lock</span>
+      </button>
+    </nav>
+  );
+};
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 const Sidebar = ({
@@ -1051,7 +1094,7 @@ const Sidebar = ({
   ];
 
   return (
-    <aside className="w-20 md:w-64 bg-surface-container-high h-screen flex flex-col transition-all duration-300 z-20 flex-shrink-0">
+    <aside className="hidden md:flex md:flex-col w-20 md:w-64 bg-surface-container-high h-screen transition-all duration-300 z-20 flex-shrink-0">
       <div className="p-6 mb-8">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-inverse-surface rounded-md flex items-center justify-center text-on-inverse-surface font-display font-bold text-xl">
@@ -1119,7 +1162,7 @@ const QuickActionRail = ({
   const alerts = state.inventory.filter((i) => i.status !== 'healthy').length;
 
   return (
-    <div className="fixed right-0 top-0 bottom-0 w-16 bg-inverse-surface flex flex-col items-center py-8 gap-6 z-30">
+    <div className="hidden md:flex fixed right-0 top-0 bottom-0 w-16 bg-inverse-surface flex-col items-center py-8 gap-6 z-30">
       <button
         onClick={onAdd}
         className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white hover:scale-110 transition-transform shadow-lg"
@@ -1174,7 +1217,7 @@ function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             day: 'numeric',
           })}
         </p>
-        <h1 className="text-5xl font-bold">Overview</h1>
+        <h1 className="text-3xl md:text-5xl font-bold">Overview</h1>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -1215,7 +1258,7 @@ function Dashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
               </span>
               <stat.icon size={20} className={stat.color} />
             </div>
-            <div className="text-6xl font-display font-bold mb-2">{stat.value}</div>
+            <div className="text-4xl md:text-6xl font-display font-bold mb-2">{stat.value}</div>
             <p className="text-on-surface-variant text-sm">{stat.sub}</p>
           </button>
         ))}
@@ -1362,7 +1405,7 @@ function Inventory({ onAdd }: { onAdd: () => void }) {
 
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-5xl font-bold mb-2">Inventory</h1>
+          <h1 className="text-3xl md:text-5xl font-bold mb-2">Inventory</h1>
           <p className="text-on-surface-variant">Manage your stock levels and supply chain.</p>
         </div>
         <button onClick={onAdd} className="btn-primary flex items-center gap-2">
@@ -1396,7 +1439,8 @@ function Inventory({ onAdd }: { onAdd: () => void }) {
           </select>
         </div>
 
-        <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left border-collapse">
           <thead>
             <tr className="bg-surface-container-low text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
               <th className="px-6 py-4">Item Details</th>
@@ -1458,6 +1502,7 @@ function Inventory({ onAdd }: { onAdd: () => void }) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </motion.div>
   );
@@ -1544,7 +1589,7 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
 
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-5xl font-bold mb-2">Attendance</h1>
+          <h1 className="text-3xl md:text-5xl font-bold mb-2">Attendance</h1>
           <p className="text-on-surface-variant">{state.staff.length} staff members</p>
         </div>
         <button
@@ -1650,7 +1695,7 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
                     </div>
 
                     {/* Status + clock times + pay */}
-                    <div className="text-right min-w-[100px]">
+                    <div className="text-right min-w-[100px] hidden sm:block">
                       {present ? (
                         <>
                           <div className="text-xs font-bold text-emerald-600 uppercase">Present</div>
@@ -1721,7 +1766,8 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-md shadow-ambient overflow-hidden">
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[500px] text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-low text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
                     <th className="px-6 py-4">Staff</th>
@@ -1757,6 +1803,7 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           )}
         </div>
@@ -1789,7 +1836,7 @@ function SettingsScreen() {
       className="space-y-8 max-w-2xl"
     >
       <header>
-        <h1 className="text-5xl font-bold mb-2">Settings</h1>
+        <h1 className="text-3xl md:text-5xl font-bold mb-2">Settings</h1>
         <p className="text-on-surface-variant">Manage your Kinetic Kitchen configuration.</p>
       </header>
 
@@ -1903,7 +1950,7 @@ function AppInner() {
   if (locked) {
     return (
       <div className="h-screen bg-surface overflow-hidden text-on-surface relative">
-        <div className="max-w-lg mx-auto px-8">
+        <div className="max-w-lg mx-auto px-4">
           <KioskScreen onManagerTap={() => setShowManagerLogin(true)} />
         </div>
         <AnimatePresence>
@@ -1924,8 +1971,8 @@ function AppInner() {
     <div className="flex h-screen bg-surface overflow-hidden text-on-surface selection:bg-primary/20">
       <Sidebar activeScreen={screen} setScreen={setScreen} onLock={() => setLocked(true)} />
 
-      <main className="flex-1 overflow-y-auto relative pr-16">
-        <div className="max-w-7xl mx-auto px-8 md:px-20 py-16">
+      <main className="flex-1 overflow-y-auto relative md:pr-16">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 lg:px-20 py-6 md:py-16 pb-24 md:pb-16">
           {screen === 'dashboard' && <Dashboard setScreen={setScreen} />}
           {screen === 'kiosk' && <KioskScreen />}  {/* no manager tap in manager mode */}
           {screen === 'restock' && <RestockScreen onAdd={() => setShowAddInventory(true)} />}
@@ -1950,6 +1997,8 @@ function AppInner() {
           <AlertsPanel onClose={() => setShowAlerts(false)} setScreen={setScreen} />
         )}
       </AnimatePresence>
+
+      <MobileNav activeScreen={screen} setScreen={setScreen} onLock={() => setLocked(true)} />
 
       <div className="fixed -bottom-24 -left-24 w-96 h-96 bg-primary/5 blur-[120px] pointer-events-none rounded-full" />
       <div className="fixed -top-24 -right-24 w-96 h-96 bg-secondary-container/10 blur-[120px] pointer-events-none rounded-full" />
