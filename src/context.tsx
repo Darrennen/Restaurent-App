@@ -30,7 +30,8 @@ type Action =
   | { type: 'SET_ATTENDANCE'; record: AttendanceRecord }
   | { type: 'DELETE_ATTENDANCE'; id: string }
   | { type: 'CLOCK_IN'; staffId: string; date: string; timestamp: string }
-  | { type: 'CLOCK_OUT'; staffId: string; date: string; timestamp: string };
+  | { type: 'CLOCK_OUT'; staffId: string; date: string; timestamp: string }
+  | { type: 'SET_MANAGER_PIN'; pin: string };
 
 function computeStatus(quantity: number, minThreshold: number): InventoryItem['status'] {
   if (quantity <= 0) return 'critical';
@@ -111,6 +112,9 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case 'SET_MANAGER_PIN':
+      return { ...state, managerPin: action.pin };
+
     default:
       return state;
   }
@@ -143,11 +147,12 @@ function loadState(): AppState {
         pin: s.pin ?? String(1001 + i),
       }));
       if (!parsed.attendance) parsed.attendance = [];
+      if (!parsed.managerPin) parsed.managerPin = '0000';
       delete parsed.orders;
       return parsed;
     }
   } catch {}
-  return { inventory: INITIAL_INVENTORY, staff: INITIAL_STAFF, attendance: [] };
+  return { inventory: INITIAL_INVENTORY, staff: INITIAL_STAFF, attendance: [], managerPin: '0000' };
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {

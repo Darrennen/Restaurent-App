@@ -24,6 +24,8 @@ import {
   Banknote,
   Minus,
   LogIn,
+  Lock,
+  KeyRound,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppProvider, useApp } from './context';
@@ -778,9 +780,70 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+// ─── Manager Login Modal ──────────────────────────────────────────────────────
+
+function ManagerLoginModal({ onClose, onUnlock }: { onClose: () => void; onUnlock: () => void }) {
+  const { state } = useApp();
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+
+  function handleSubmit() {
+    if (pin === state.managerPin) {
+      onUnlock();
+    } else {
+      setError('Incorrect PIN');
+      setPin('');
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="bg-surface-container-lowest rounded-md shadow-2xl w-full max-w-xs mx-4 p-8 flex flex-col items-center gap-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-12 h-12 rounded-full bg-inverse-surface flex items-center justify-center">
+          <KeyRound size={22} className="text-on-inverse-surface" />
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl font-bold">Manager Login</h2>
+          <p className="text-sm text-on-surface-variant mt-1">Enter your manager PIN</p>
+        </div>
+        <input
+          type="password"
+          inputMode="numeric"
+          maxLength={4}
+          autoFocus
+          className="input-industrial w-full text-center text-3xl tracking-[0.5em] py-3"
+          placeholder="••••"
+          value={pin}
+          onChange={(e) => {
+            setError('');
+            setPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+        />
+        {error && <p className="text-sm text-error -mt-2">{error}</p>}
+        <div className="flex gap-3 w-full">
+          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button onClick={handleSubmit} className="btn-primary flex-1" disabled={pin.length !== 4}>
+            Unlock
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Kiosk Screen ─────────────────────────────────────────────────────────────
 
-function KioskScreen() {
+function KioskScreen({ onManagerTap }: { onManagerTap?: () => void }) {
   const { state, dispatch } = useApp();
   const [pin, setPin] = useState('');
   const [found, setFound] = useState<StaffMember | null>(null);
@@ -849,7 +912,7 @@ function KioskScreen() {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center min-h-[80vh] gap-8 select-none"
+      className="relative flex flex-col items-center justify-center min-h-[80vh] gap-8 select-none"
     >
       {/* Live clock */}
       <div className="text-center">
@@ -954,6 +1017,16 @@ function KioskScreen() {
           Add staff members and assign PINs in the Attendance screen first.
         </p>
       )}
+
+      {/* Subtle manager button — not obvious to staff */}
+      {onManagerTap && (
+        <button
+          onClick={onManagerTap}
+          className="absolute bottom-6 right-6 text-on-surface-variant/30 hover:text-on-surface-variant/60 transition-colors text-xs flex items-center gap-1"
+        >
+          <Lock size={12} /> Manager
+        </button>
+      )}
     </motion.div>
   );
 }
@@ -963,9 +1036,11 @@ function KioskScreen() {
 const Sidebar = ({
   activeScreen,
   setScreen,
+  onLock,
 }: {
   activeScreen: Screen;
   setScreen: (s: Screen) => void;
+  onLock: () => void;
 }) => {
   const navItems = [
     { id: 'dashboard' as Screen, icon: LayoutDashboard, label: 'Dashboard' },
@@ -1018,16 +1093,11 @@ const Sidebar = ({
           <span className="hidden md:block font-medium">Settings</span>
         </button>
         <button
-          onClick={() => {
-            if (confirm('Reset all data to defaults?')) {
-              localStorage.clear();
-              window.location.reload();
-            }
-          }}
-          className="w-full flex items-center gap-4 p-3 text-error hover:bg-error/5 rounded-md transition-all"
+          onClick={onLock}
+          className="w-full flex items-center gap-4 p-3 text-on-surface-variant hover:bg-surface-container-highest rounded-md transition-all"
         >
-          <LogOut size={20} />
-          <span className="hidden md:block font-medium">Reset Data</span>
+          <Lock size={20} />
+          <span className="hidden md:block font-medium">Lock</span>
         </button>
       </div>
     </aside>
@@ -1698,7 +1768,20 @@ function AttendanceScreen({ onAddStaff }: { onAddStaff: () => void }) {
 // ─── Settings Screen ──────────────────────────────────────────────────────────
 
 function SettingsScreen() {
+  const { state, dispatch } = useApp();
   const hasKey = !!process.env.GEMINI_API_KEY;
+  const [pinForm, setPinForm] = useState({ current: '', next: '', confirm: '' });
+  const [pinMsg, setPinMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  function handleChangePIN() {
+    if (pinForm.current !== state.managerPin) { setPinMsg({ text: 'Current PIN is incorrect', ok: false }); return; }
+    if (!/^\d{4}$/.test(pinForm.next)) { setPinMsg({ text: 'New PIN must be exactly 4 digits', ok: false }); return; }
+    if (pinForm.next !== pinForm.confirm) { setPinMsg({ text: 'New PINs do not match', ok: false }); return; }
+    dispatch({ type: 'SET_MANAGER_PIN', pin: pinForm.next });
+    setPinForm({ current: '', next: '', confirm: '' });
+    setPinMsg({ text: 'Manager PIN updated', ok: true });
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -1736,6 +1819,44 @@ function SettingsScreen() {
         </div>
 
         <div className="p-6">
+          <h2 className="font-bold mb-1">Manager PIN</h2>
+          <p className="text-sm text-on-surface-variant mb-4">
+            Change the PIN used to unlock the management screens. Default is <code className="font-mono bg-surface-container-high px-1 rounded">0000</code>.
+          </p>
+          <div className="space-y-3 max-w-xs">
+            {(['current', 'next', 'confirm'] as const).map((field) => (
+              <div key={field}>
+                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+                  {field === 'current' ? 'Current PIN' : field === 'next' ? 'New PIN' : 'Confirm New PIN'}
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  className="input-industrial w-full tracking-widest text-xl"
+                  placeholder="••••"
+                  value={pinForm[field]}
+                  onChange={(e) => {
+                    setPinMsg(null);
+                    setPinForm((f) => ({ ...f, [field]: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+                  }}
+                />
+              </div>
+            ))}
+            {pinMsg && (
+              <p className={`text-sm ${pinMsg.ok ? 'text-emerald-600' : 'text-error'}`}>{pinMsg.text}</p>
+            )}
+            <button
+              onClick={handleChangePIN}
+              className="btn-primary text-sm"
+              disabled={!pinForm.current || !pinForm.next || !pinForm.confirm}
+            >
+              Update PIN
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
           <h2 className="font-bold mb-1">Data Storage</h2>
           <p className="text-sm text-on-surface-variant mb-3">
             All data is stored locally in your browser's localStorage.
@@ -1767,6 +1888,8 @@ function SettingsScreen() {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 function AppInner() {
+  const [locked, setLocked] = useState(true);
+  const [showManagerLogin, setShowManagerLogin] = useState(false);
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [showAddInventory, setShowAddInventory] = useState(false);
   const [showAI, setShowAI] = useState(false);
@@ -1776,16 +1899,35 @@ function AppInner() {
     setShowAddInventory(true);
   }
 
+  // Locked: only show kiosk
+  if (locked) {
+    return (
+      <div className="h-screen bg-surface overflow-hidden text-on-surface relative">
+        <div className="max-w-lg mx-auto px-8">
+          <KioskScreen onManagerTap={() => setShowManagerLogin(true)} />
+        </div>
+        <AnimatePresence>
+          {showManagerLogin && (
+            <ManagerLoginModal
+              onClose={() => setShowManagerLogin(false)}
+              onUnlock={() => { setLocked(false); setShowManagerLogin(false); setScreen('dashboard'); }}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
 
 
   return (
     <div className="flex h-screen bg-surface overflow-hidden text-on-surface selection:bg-primary/20">
-      <Sidebar activeScreen={screen} setScreen={setScreen} />
+      <Sidebar activeScreen={screen} setScreen={setScreen} onLock={() => setLocked(true)} />
 
       <main className="flex-1 overflow-y-auto relative pr-16">
         <div className="max-w-7xl mx-auto px-8 md:px-20 py-16">
           {screen === 'dashboard' && <Dashboard setScreen={setScreen} />}
-          {screen === 'kiosk' && <KioskScreen />}
+          {screen === 'kiosk' && <KioskScreen />}  {/* no manager tap in manager mode */}
           {screen === 'restock' && <RestockScreen onAdd={() => setShowAddInventory(true)} />}
           {screen === 'inventory' && <Inventory onAdd={() => setShowAddInventory(true)} />}
           {screen === 'attendance' && <AttendanceScreen onAddStaff={() => {}} />}

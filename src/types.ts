@@ -33,4 +33,5 @@ export interface AppState {
   inventory: InventoryItem[];
   staff: StaffMember[];
   attendance: AttendanceRecord[];
+  managerPin: string;
 }
