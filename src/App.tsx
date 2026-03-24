@@ -568,7 +568,7 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
 
 // ─── Restock Screen ───────────────────────────────────────────────────────────
 
-function RestockScreen({ onAdd }: { onAdd: () => void }) {
+function RestockScreen({ onAdd, staffMode = false }: { onAdd: () => void; staffMode?: boolean }) {
   const { state, dispatch } = useApp();
   const [filter, setFilter] = useState<'urgent' | 'all'>('urgent');
   const [quickEdit, setQuickEdit] = useState<{ id: string; value: string } | null>(null);
@@ -619,9 +619,11 @@ function RestockScreen({ onAdd }: { onAdd: () => void }) {
               : `${urgent.length} item${urgent.length !== 1 ? 's' : ''} need${urgent.length === 1 ? 's' : ''} restocking`}
           </p>
         </div>
-        <button onClick={onAdd} className="btn-primary flex items-center gap-2">
-          <Plus size={18} /> Add Item
-        </button>
+        {!staffMode && (
+          <button onClick={onAdd} className="btn-primary flex items-center gap-2">
+            <Plus size={18} /> Add Item
+          </button>
+        )}
       </header>
 
       {/* Stock summary */}
@@ -843,7 +845,7 @@ function ManagerLoginModal({ onClose, onUnlock }: { onClose: () => void; onUnloc
 
 // ─── Kiosk Screen ─────────────────────────────────────────────────────────────
 
-function KioskScreen({ onManagerTap }: { onManagerTap?: () => void }) {
+function KioskScreen() {
   const { state, dispatch } = useApp();
   const [pin, setPin] = useState('');
   const [found, setFound] = useState<StaffMember | null>(null);
@@ -1018,15 +1020,6 @@ function KioskScreen({ onManagerTap }: { onManagerTap?: () => void }) {
         </p>
       )}
 
-      {/* Subtle manager button — not obvious to staff */}
-      {onManagerTap && (
-        <button
-          onClick={onManagerTap}
-          className="absolute bottom-6 right-6 text-on-surface-variant/30 hover:text-on-surface-variant/60 transition-colors text-xs flex items-center gap-1"
-        >
-          <Lock size={12} /> Manager
-        </button>
-      )}
     </motion.div>
   );
 }
@@ -1936,6 +1929,7 @@ function SettingsScreen() {
 
 function AppInner() {
   const [locked, setLocked] = useState(true);
+  const [lockedTab, setLockedTab] = useState<'kiosk' | 'restock'>('kiosk');
   const [showManagerLogin, setShowManagerLogin] = useState(false);
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [showAddInventory, setShowAddInventory] = useState(false);
@@ -1946,13 +1940,44 @@ function AppInner() {
     setShowAddInventory(true);
   }
 
-  // Locked: only show kiosk
+  // Locked: staff-facing view (clock in/out + stock take only)
   if (locked) {
     return (
-      <div className="h-screen bg-surface overflow-hidden text-on-surface relative">
-        <div className="max-w-lg mx-auto px-4">
-          <KioskScreen onManagerTap={() => setShowManagerLogin(true)} />
+      <div className="h-screen bg-surface text-on-surface flex flex-col relative">
+        <div className="flex-1 overflow-y-auto pb-2">
+          <div className="max-w-lg mx-auto px-4">
+            {lockedTab === 'kiosk' && <KioskScreen />}
+            {lockedTab === 'restock' && <RestockScreen onAdd={() => {}} staffMode />}
+          </div>
         </div>
+
+        {/* Staff bottom tabs */}
+        <nav className="flex border-t border-surface-container-highest bg-surface-container-high shrink-0">
+          {([
+            { id: 'kiosk', icon: LogIn, label: 'Clock In/Out' },
+            { id: 'restock', icon: ShoppingCart, label: 'Stock Take' },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setLockedTab(tab.id)}
+              className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 transition-colors ${
+                lockedTab === tab.id ? 'text-primary' : 'text-on-surface-variant'
+              }`}
+            >
+              <tab.icon size={22} />
+              <span className="text-xs font-medium">{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Subtle manager unlock button */}
+        <button
+          onClick={() => setShowManagerLogin(true)}
+          className="absolute bottom-16 right-4 text-on-surface-variant/25 hover:text-on-surface-variant/50 transition-colors text-[11px] flex items-center gap-1"
+        >
+          <Lock size={11} /> Manager
+        </button>
+
         <AnimatePresence>
           {showManagerLogin && (
             <ManagerLoginModal
@@ -1974,7 +1999,7 @@ function AppInner() {
       <main className="flex-1 overflow-y-auto relative md:pr-16">
         <div className="max-w-7xl mx-auto px-4 md:px-8 lg:px-20 py-6 md:py-16 pb-24 md:pb-16">
           {screen === 'dashboard' && <Dashboard setScreen={setScreen} />}
-          {screen === 'kiosk' && <KioskScreen />}  {/* no manager tap in manager mode */}
+          {screen === 'kiosk' && <KioskScreen />}
           {screen === 'restock' && <RestockScreen onAdd={() => setShowAddInventory(true)} />}
           {screen === 'inventory' && <Inventory onAdd={() => setShowAddInventory(true)} />}
           {screen === 'attendance' && <AttendanceScreen onAddStaff={() => {}} />}
