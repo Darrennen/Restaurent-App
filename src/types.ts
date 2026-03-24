@@ -29,9 +29,20 @@ export interface AttendanceRecord {
   clockOut?: string; // ISO timestamp
 }
 
+export interface StockRequest {
+  id: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  requestedBy: string;
+  note: string;
+  requestedAt: string; // ISO timestamp
+}
+
 export interface AppState {
   inventory: InventoryItem[];
   staff: StaffMember[];
   attendance: AttendanceRecord[];
   managerPin: string;
+  stockRequests: StockRequest[];
 }

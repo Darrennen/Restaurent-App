@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import type { AppState, InventoryItem, StaffMember, AttendanceRecord } from './types';
+import type { AppState, InventoryItem, StaffMember, AttendanceRecord, StockRequest } from './types';
 
 // --- Initial Data ---
 
@@ -31,7 +31,9 @@ type Action =
   | { type: 'DELETE_ATTENDANCE'; id: string }
   | { type: 'CLOCK_IN'; staffId: string; date: string; timestamp: string }
   | { type: 'CLOCK_OUT'; staffId: string; date: string; timestamp: string }
-  | { type: 'SET_MANAGER_PIN'; pin: string };
+  | { type: 'SET_MANAGER_PIN'; pin: string }
+  | { type: 'ADD_STOCK_REQUEST'; request: StockRequest }
+  | { type: 'DELETE_STOCK_REQUEST'; id: string };
 
 function computeStatus(quantity: number, minThreshold: number): InventoryItem['status'] {
   if (quantity <= 0) return 'critical';
@@ -115,6 +117,12 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_MANAGER_PIN':
       return { ...state, managerPin: action.pin };
 
+    case 'ADD_STOCK_REQUEST':
+      return { ...state, stockRequests: [action.request, ...state.stockRequests] };
+
+    case 'DELETE_STOCK_REQUEST':
+      return { ...state, stockRequests: state.stockRequests.filter((r) => r.id !== action.id) };
+
     default:
       return state;
   }
@@ -148,11 +156,12 @@ function loadState(): AppState {
       }));
       if (!parsed.attendance) parsed.attendance = [];
       if (!parsed.managerPin) parsed.managerPin = '0000';
+      if (!parsed.stockRequests) parsed.stockRequests = [];
       delete parsed.orders;
       return parsed;
     }
   } catch {}
-  return { inventory: INITIAL_INVENTORY, staff: INITIAL_STAFF, attendance: [], managerPin: '0000' };
+  return { inventory: INITIAL_INVENTORY, staff: INITIAL_STAFF, attendance: [], managerPin: '0000', stockRequests: [] };
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {

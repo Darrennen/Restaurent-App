@@ -30,7 +30,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { AppProvider, useApp } from './context';
 import { askAI, getReorderSuggestions } from './ai';
-import type { Screen, InventoryItem, StaffMember } from './types';
+import type { Screen, InventoryItem, StaffMember, StockRequest } from './types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -566,12 +566,129 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
   );
 }
 
+// ─── Stock Request Modal ──────────────────────────────────────────────────────
+
+function StockRequestModal({ onClose }: { onClose: () => void }) {
+  const { state, dispatch } = useApp();
+  const [form, setForm] = useState({ itemName: '', quantity: '', unit: '', requestedBy: '', note: '' });
+
+  // Auto-fill unit when item matches an inventory item
+  function handleItemChange(name: string) {
+    const match = state.inventory.find((i) => i.name.toLowerCase() === name.toLowerCase());
+    setForm((f) => ({ ...f, itemName: name, unit: match ? match.unit : f.unit }));
+  }
+
+  function handleSubmit() {
+    if (!form.itemName.trim() || !form.quantity || !form.requestedBy.trim()) return;
+    const qty = parseFloat(form.quantity);
+    if (isNaN(qty) || qty <= 0) return;
+    const request: StockRequest = {
+      id: newId('REQ'),
+      itemName: form.itemName.trim(),
+      quantity: qty,
+      unit: form.unit.trim() || 'units',
+      requestedBy: form.requestedBy.trim(),
+      note: form.note.trim(),
+      requestedAt: new Date().toISOString(),
+    };
+    dispatch({ type: 'ADD_STOCK_REQUEST', request });
+    onClose();
+  }
+
+  return (
+    <Modal title="Request Restock" onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+            Item needed
+          </label>
+          <input
+            className="input-industrial w-full"
+            placeholder="e.g. Chicken breast"
+            list="inventory-items"
+            value={form.itemName}
+            onChange={(e) => handleItemChange(e.target.value)}
+            autoFocus
+          />
+          <datalist id="inventory-items">
+            {state.inventory.map((i) => <option key={i.id} value={i.name} />)}
+          </datalist>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+              Quantity needed
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              className="input-industrial w-full"
+              placeholder="0"
+              value={form.quantity}
+              onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+              Unit
+            </label>
+            <input
+              className="input-industrial w-full"
+              placeholder="kg, L, boxes…"
+              value={form.unit}
+              onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+            Your name
+          </label>
+          <input
+            className="input-industrial w-full"
+            placeholder="e.g. Alice"
+            list="staff-names"
+            value={form.requestedBy}
+            onChange={(e) => setForm((f) => ({ ...f, requestedBy: e.target.value }))}
+          />
+          <datalist id="staff-names">
+            {state.staff.map((s) => <option key={s.id} value={s.name} />)}
+          </datalist>
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">
+            Note <span className="font-normal normal-case">(optional)</span>
+          </label>
+          <input
+            className="input-industrial w-full"
+            placeholder="e.g. running out fast, need before Friday"
+            value={form.note}
+            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+          />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button
+            onClick={handleSubmit}
+            className="btn-primary flex-1"
+            disabled={!form.itemName.trim() || !form.quantity || !form.requestedBy.trim()}
+          >
+            Submit Request
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Restock Screen ───────────────────────────────────────────────────────────
 
 function RestockScreen({ onAdd, staffMode = false }: { onAdd: () => void; staffMode?: boolean }) {
   const { state, dispatch } = useApp();
   const [filter, setFilter] = useState<'urgent' | 'all'>('urgent');
   const [quickEdit, setQuickEdit] = useState<{ id: string; value: string } | null>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   const urgent = state.inventory.filter((i) => i.status !== 'healthy');
   const displayed = filter === 'urgent' ? urgent : [...state.inventory];
@@ -603,6 +720,10 @@ function RestockScreen({ onAdd, staffMode = false }: { onAdd: () => void; staffM
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8"
     >
+      <AnimatePresence>
+        {showRequestModal && <StockRequestModal onClose={() => setShowRequestModal(false)} />}
+      </AnimatePresence>
+
       <header className="flex justify-between items-end">
         <div>
           <p className="text-on-surface-variant text-sm font-medium uppercase tracking-widest mb-2">
@@ -612,19 +733,56 @@ function RestockScreen({ onAdd, staffMode = false }: { onAdd: () => void; staffM
               day: 'numeric',
             })}
           </p>
-          <h1 className="text-3xl md:text-5xl font-bold mb-2">Restock</h1>
+          <h1 className="text-3xl md:text-5xl font-bold mb-2">
+            {staffMode ? 'Stock Take' : 'Restock'}
+          </h1>
           <p className="text-on-surface-variant">
             {urgent.length === 0
               ? 'All items are well stocked.'
               : `${urgent.length} item${urgent.length !== 1 ? 's' : ''} need${urgent.length === 1 ? 's' : ''} restocking`}
           </p>
         </div>
-        {!staffMode && (
-          <button onClick={onAdd} className="btn-primary flex items-center gap-2">
-            <Plus size={18} /> Add Item
+        <div className="flex gap-2">
+          <button onClick={() => setShowRequestModal(true)} className="btn-primary flex items-center gap-2">
+            <Plus size={18} /> {staffMode ? 'Request Item' : 'Request'}
           </button>
-        )}
+          {!staffMode && (
+            <button onClick={onAdd} className="btn-secondary flex items-center gap-2">
+              <Plus size={18} /> Add Item
+            </button>
+          )}
+        </div>
       </header>
+
+      {/* Pending staff requests — manager only */}
+      {!staffMode && state.stockRequests.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-2">
+            <AlertCircle size={14} className="text-primary" />
+            Staff Requests ({state.stockRequests.length})
+          </h2>
+          {state.stockRequests.map((req) => (
+            <div key={req.id} className="bg-surface-container-lowest rounded-md p-4 flex items-center gap-4 border-l-4 border-primary">
+              <div className="flex-1 min-w-0">
+                <div className="font-bold">{req.itemName}</div>
+                <div className="text-sm text-on-surface-variant">
+                  {req.quantity} {req.unit}
+                  {req.note && <span> · {req.note}</span>}
+                </div>
+                <div className="text-xs text-on-surface-variant mt-0.5">
+                  By {req.requestedBy} · {new Date(req.requestedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <button
+                onClick={() => dispatch({ type: 'DELETE_STOCK_REQUEST', id: req.id })}
+                className="btn-primary text-xs py-2 px-3 whitespace-nowrap"
+              >
+                Done ✓
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Stock summary */}
       <div className="grid grid-cols-3 gap-4">
